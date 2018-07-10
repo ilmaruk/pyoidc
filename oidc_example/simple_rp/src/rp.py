@@ -6,9 +6,11 @@ import yaml
 
 from oic.oauth2 import rndstr
 from oic.oic import Client
-from oic.oic.message import AuthorizationResponse
+from oic.oic.message import AuthorizationResponse, RegistrationResponse
 
 __author__ = 'regu0004'
+
+_MAGIK_BASE = 'http://localhost:7301/sso'
 
 
 class OIDCExampleRP(object):
@@ -26,6 +28,15 @@ class OIDCExampleRP(object):
         session["client"].register(provider_info["registration_endpoint"],
                                    **self.client_metadata)
 
+    def register_statically(self, session):
+        info = {"client_id": "1234567890", "client_secret": "abcdefghijklmnop"}
+        client_reg = RegistrationResponse(**info)
+        session["client"].store_registration_info(client_reg)
+
+        session["client"].issuer = _MAGIK_BASE
+        session["client"].authorization_endpoint = "%s/authorize" % _MAGIK_BASE
+        session["client"].token_endpoint = "%s/token" % _MAGIK_BASE
+
     def make_authentication_request(self, session):
         session["state"] = rndstr()
         session["nonce"] = rndstr()
@@ -33,7 +44,8 @@ class OIDCExampleRP(object):
             "response_type": self.response_type,
             "state": session["state"],
             "nonce": session["nonce"],
-            "redirect_uri": self.redirect_uri
+            "redirect_uri": self.redirect_uri,
+            "prompt": "login",
         }
 
         request_args.update(self.behaviour)
@@ -93,8 +105,8 @@ class RPServer(object):
     def authenticate(self, uid):
         cherrypy.session["client"] = Client(verify_ssl=self.verify_ssl)
 
-        # webfinger+registration
-        self.rp.register_with_dynamic_provider(cherrypy.session, uid)
+        # static registration
+        self.rp.register_statically(cherrypy.session)
 
         # auth req
         redirect_url = self.rp.make_authentication_request(cherrypy.session)
