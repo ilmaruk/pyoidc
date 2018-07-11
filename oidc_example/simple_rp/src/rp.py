@@ -30,8 +30,8 @@ class OIDCExampleRP(object):
         session["client"].register(provider_info["registration_endpoint"],
                                    **self.client_metadata)
 
-    def register_statically(self, session):
-        info = {"client_id": "1234567890", "client_secret": "abcdefghijklmnop"}
+    def register_statically(self, session, uid):
+        info = {"client_id": uid, "client_secret": "abcdefghijklmnop"}
         client_reg = RegistrationResponse(**info)
         session["client"].store_registration_info(client_reg)
 
@@ -112,7 +112,7 @@ class RPServer(object):
         cherrypy.session["client"] = Client(verify_ssl=self.verify_ssl)
 
         # static registration
-        self.rp.register_statically(cherrypy.session)
+        self.rp.register_statically(cherrypy.session, uid)
 
         # auth req
         redirect_url = self.rp.make_authentication_request(cherrypy.session)
