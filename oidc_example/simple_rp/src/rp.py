@@ -4,6 +4,8 @@ import os
 import cherrypy
 import yaml
 
+import jwkest.jwk
+
 from oic.oauth2 import rndstr
 from oic.oic import Client
 from oic.oic.message import AuthorizationResponse, RegistrationResponse
@@ -78,11 +80,15 @@ class OIDCExampleRP(object):
             "client_secret": session["client"].client_secret
         }
 
+        key = jwkest.jwk.rsa_load('../magik.key.pub')
+        rsa_key = jwkest.jwk.RSAKey(use='dec', alg='RS256', key=key)
+
         token_response = session["client"].do_access_token_request(
             scope="openid",
-            state=session[
-                "state"],
-            request_args=args)
+            state=session["state"],
+            request_args=args,
+            key=[rsa_key]
+        )
 
         return token_response
 
