@@ -143,6 +143,7 @@ class RPServer(object):
                                 response["id_token"], userinfo)
 
     @cherrypy.expose
+    @cherrypy.tools.json_out()
     def code_flow(self, **kwargs):
         if "error" in kwargs:
             raise cherrypy.HTTPError(500, "{}: {}".format(kwargs["error"],
@@ -154,12 +155,8 @@ class RPServer(object):
                                                               qs)
         auth_code = auth_response["code"]
         token_response = self.rp.make_token_request(cherrypy.session, auth_code)
-        userinfo = self.rp.make_userinfo_request(cherrypy.session,
-                                                 token_response["access_token"])
 
-        html_page = self._load_HTML_page_from_file("htdocs/success_page.html")
-        return html_page.format(auth_code, token_response["access_token"],
-                                token_response["id_token"], userinfo)
+        return token_response["id_token"].to_dict()
 
     @cherrypy.expose
     def implicit_hybrid_flow(self, **kwargs):
