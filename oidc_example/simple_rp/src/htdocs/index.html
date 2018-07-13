@@ -1,14 +1,16 @@
 <html>
-<head><title>Test RP</title></head>
+<head><title>Dummy Client ({0})</title></head>
 <body>
-<h1>Example OpenID Connect RP</h1>
-
-<b>Enter the Client ID:</b>
+<h1>Magik Demo via Dummy OIDC Client</h1>
+<h2>{1}</h2>
 
 <form action='/authenticate' method='GET'>
-    <input type='text' name='uid' autofocus required>
-    <input type='submit' value='Start authentication'>
+    <input type='submit' value='Start flow'>
 </form>
+
+<!--<form action='/logout' method='GET'>-->
+    <!--<input type='submit' value='Logout'>-->
+<!--</form>-->
 
 </body>
 </html>

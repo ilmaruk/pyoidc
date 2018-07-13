@@ -16,7 +16,7 @@ _MAGIK_BASE = 'http://localhost:7301/sso'
 
 
 class OIDCExampleRP(object):
-    def __init__(self, client_metadata, behaviour):
+    def __init__(self, client_metadata, behaviour, client_id):
         self.client_metadata = client_metadata
         self.behaviour = behaviour
 
@@ -24,20 +24,23 @@ class OIDCExampleRP(object):
         self.response_type = self.client_metadata["response_types"][0]
         self.behaviour = self.behaviour
 
+        self.client_id = client_id
+
     def register_with_dynamic_provider(self, session, uid):
         issuer_url = session["client"].wf.discovery_query(uid)
         provider_info = session["client"].provider_config(issuer_url)
         session["client"].register(provider_info["registration_endpoint"],
                                    **self.client_metadata)
 
-    def register_statically(self, session, uid):
-        info = {"client_id": uid, "client_secret": "abcdefghijklmnop"}
+    def register_statically(self, session):
+        info = {"client_id": self.client_id, "client_secret": "abcdefghijklmnop"}
         client_reg = RegistrationResponse(**info)
         session["client"].store_registration_info(client_reg)
 
         session["client"].issuer = _MAGIK_BASE
         session["client"].authorization_endpoint = "%s/authorize" % _MAGIK_BASE
         session["client"].token_endpoint = "%s/token" % _MAGIK_BASE
+        session["client"].end_session_endpoint = "%s/logout" % _MAGIK_BASE
 
     def make_authentication_request(self, session):
         session["state"] = rndstr()
@@ -97,22 +100,28 @@ class OIDCExampleRP(object):
             access_token=access_token)
         return userinfo_response
 
+    def make_logout_request(self, session):
+        response = session["client"].do_end_session_request(scope='openid', state=rndstr())
+        pass
+
 
 class RPServer(object):
-    def __init__(self, client_metadata, behaviour, verify_ssl):
-        self.rp = OIDCExampleRP(client_metadata, behaviour)
+    def __init__(self, client_metadata, behaviour, verify_ssl, client_id):
+        self.rp = OIDCExampleRP(client_metadata, behaviour, client_id)
         self.verify_ssl = verify_ssl
+        self.client_id = client_id
 
     @cherrypy.expose
     def index(self):
-        return self._load_HTML_page_from_file("htdocs/index.html")
+        html = self._load_HTML_page_from_file("htdocs/index.html")
+        return html.format(self.client_id, self.client_id)
 
     @cherrypy.expose
-    def authenticate(self, uid):
+    def authenticate(self):
         cherrypy.session["client"] = Client(verify_ssl=self.verify_ssl)
 
         # static registration
-        self.rp.register_statically(cherrypy.session, uid)
+        self.rp.register_statically(cherrypy.session)
 
         # auth req
         redirect_url = self.rp.make_authentication_request(cherrypy.session)
@@ -170,11 +179,17 @@ class RPServer(object):
         with open(path, "r") as f:
             return f.read()
 
+    @cherrypy.expose
+    def logout(self):
+        self.rp.make_logout_request(cherrypy.session)
+        raise cherrypy.HTTPRedirect('/')
+
 
 def main():
     parser = argparse.ArgumentParser(description='Example OIDC Client.')
     parser.add_argument("-p", "--port", default=80, type=int)
     parser.add_argument("-b", "--base", default="https://localhost", type=str)
+    parser.add_argument("-c", "--client_id", type=str, required=True)
     parser.add_argument("settings")
     args = parser.parse_args()
 
@@ -188,7 +203,7 @@ def main():
                                           registration_info["redirect_uris"]]
 
     rp_server = RPServer(registration_info, settings["behaviour"],
-                         settings["server"]["verify_ssl"])
+                         settings["server"]["verify_ssl"], args.client_id)
 
     # Mount the WSGI callable object (app) on the root directory
     cherrypy.tree.mount(rp_server, "/")
@@ -197,7 +212,8 @@ def main():
     cherrypy.config.update({
         'tools.sessions.on': True,
         'server.socket_port': args.port,
-        'server.socket_host': '0.0.0.0'
+        'server.socket_host': '0.0.0.0',
+        'tools.sessions.name': "%s-session" % args.client_id,
     })
 
     if baseurl.startswith("https://"):
@@ -205,7 +221,7 @@ def main():
             'server.ssl_module': 'builtin',
             'server.ssl_certificate': settings["server"]["cert"],
             'server.ssl_private_key': settings["server"]["key"],
-            'server.ssl_certificate_chain': settings["server"]["cert_chain"]
+            'server.ssl_certificate_chain': settings["server"]["cert_chain"],
         })
 
     # Start the CherryPy WSGI web server
